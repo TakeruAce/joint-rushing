@@ -1,0 +1,869 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Joint Rushing Analyzer</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: #1a1a2e;
+            color: #e0e0e0;
+            min-height: 100vh;
+        }
+
+        h1 {
+            text-align: center;
+            padding: 20px;
+            font-size: 1.8rem;
+            color: #e94560;
+        }
+
+        .controls {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 20px;
+            padding: 10px 20px;
+            flex-wrap: wrap;
+        }
+
+        .controls label {
+            font-size: 0.95rem;
+        }
+
+        .controls input[type="number"] {
+            width: 70px;
+            padding: 6px 8px;
+            border: 1px solid #444;
+            border-radius: 4px;
+            background: #16213e;
+            color: #e0e0e0;
+            font-size: 0.95rem;
+        }
+
+        .controls button {
+            padding: 10px 24px;
+            border: none;
+            border-radius: 6px;
+            font-size: 1rem;
+            font-weight: bold;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        #startBtn {
+            background: #e94560;
+            color: white;
+        }
+
+        #startBtn:hover {
+            background: #c73e54;
+        }
+
+        #startBtn:disabled {
+            background: #555;
+            cursor: not-allowed;
+        }
+
+        #stopBtn {
+            background: #0f3460;
+            color: white;
+        }
+
+        #stopBtn:hover {
+            background: #1a4a80;
+        }
+
+        #stopBtn:disabled {
+            background: #555;
+            cursor: not-allowed;
+        }
+
+        #resetBtn {
+            background: #533483;
+            color: white;
+        }
+
+        #resetBtn:hover {
+            background: #6a45a0;
+        }
+
+        .status-bar {
+            text-align: center;
+            padding: 12px;
+            font-size: 1.1rem;
+            font-weight: bold;
+        }
+
+        .status-bar .metronome-on {
+            color: #4ecca3;
+        }
+
+        .status-bar .metronome-off {
+            color: #e94560;
+        }
+
+        .tap-area-container {
+            display: flex;
+            justify-content: center;
+            gap: 30px;
+            padding: 20px;
+            flex-wrap: wrap;
+        }
+
+        .tap-area {
+            width: 300px;
+            height: 220px;
+            border-radius: 16px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            user-select: none;
+            -webkit-user-select: none;
+            transition: transform 0.08s, box-shadow 0.08s;
+            position: relative;
+        }
+
+        .tap-area:active {
+            transform: scale(0.96);
+        }
+
+        .tap-area.flash {
+            box-shadow: 0 0 30px rgba(255, 255, 255, 0.5);
+        }
+
+        #player1Area {
+            background: linear-gradient(135deg, #0f3460, #16213e);
+            border: 3px solid #4ecca3;
+        }
+
+        #player2Area {
+            background: linear-gradient(135deg, #533483, #16213e);
+            border: 3px solid #e94560;
+        }
+
+        .tap-area .player-label {
+            font-size: 1.4rem;
+            font-weight: bold;
+            margin-bottom: 8px;
+        }
+
+        .tap-area .key-hint {
+            font-size: 0.9rem;
+            color: #999;
+            margin-bottom: 12px;
+        }
+
+        .tap-area .tap-count {
+            font-size: 2.5rem;
+            font-weight: bold;
+        }
+
+        .tap-area .last-interval {
+            font-size: 0.85rem;
+            color: #aaa;
+            margin-top: 8px;
+        }
+
+        #player1Area .player-label { color: #4ecca3; }
+        #player2Area .player-label { color: #e94560; }
+
+        .metronome-indicator {
+            text-align: center;
+            padding: 10px;
+            font-size: 1.2rem;
+        }
+
+        .metronome-indicator .beat-dot {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            background: #333;
+            margin: 0 4px;
+            transition: background 0.05s;
+        }
+
+        .metronome-indicator .beat-dot.active {
+            background: #e94560;
+            box-shadow: 0 0 10px #e94560;
+        }
+
+        .analysis-section {
+            padding: 20px 40px;
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        .analysis-section h2 {
+            color: #e94560;
+            margin-bottom: 15px;
+            font-size: 1.3rem;
+        }
+
+        .chart-container {
+            background: #16213e;
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 25px;
+        }
+
+        .chart-container canvas {
+            width: 100% !important;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            margin-bottom: 25px;
+        }
+
+        .stat-card {
+            background: #16213e;
+            border-radius: 12px;
+            padding: 20px;
+        }
+
+        .stat-card h3 {
+            font-size: 1rem;
+            margin-bottom: 10px;
+            color: #aaa;
+        }
+
+        .stat-card .stat-value {
+            font-size: 1.8rem;
+            font-weight: bold;
+        }
+
+        .stat-card.player1 .stat-value { color: #4ecca3; }
+        .stat-card.player2 .stat-value { color: #e94560; }
+
+        #analyzeBtn {
+            display: block;
+            margin: 20px auto;
+            padding: 14px 40px;
+            background: #4ecca3;
+            color: #1a1a2e;
+            border: none;
+            border-radius: 8px;
+            font-size: 1.1rem;
+            font-weight: bold;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        #analyzeBtn:hover {
+            background: #3dbb92;
+        }
+
+        #analyzeBtn:disabled {
+            background: #555;
+            color: #888;
+            cursor: not-allowed;
+        }
+
+        .hidden {
+            display: none !important;
+        }
+
+        .phase-info {
+            text-align: center;
+            padding: 5px;
+            font-size: 0.9rem;
+            color: #777;
+        }
+
+        .instructions {
+            max-width: 700px;
+            margin: 0 auto;
+            padding: 10px 20px 20px;
+            text-align: center;
+            color: #888;
+            font-size: 0.85rem;
+            line-height: 1.6;
+        }
+
+        @media (max-width: 700px) {
+            .tap-area {
+                width: 90%;
+                height: 160px;
+            }
+            .analysis-section {
+                padding: 20px 15px;
+            }
+            .stats-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <h1>Joint Rushing Analyzer</h1>
+
+    <div class="instructions">
+        メトロノームに合わせて2人でタップを開始し、途中でメトロノームを切って継続。<br>
+        テンポがどのように変化（加速=rushing）するかを分析します。
+    </div>
+
+    <div class="controls">
+        <label>BPM: <input type="number" id="bpmInput" value="120" min="40" max="240"></label>
+        <label>メトロノーム停止まで:
+            <input type="number" id="metronomeBeats" value="16" min="4" max="64"> 拍
+        </label>
+        <button id="startBtn" onclick="startSession()">Start</button>
+        <button id="stopBtn" onclick="stopSession()" disabled>Stop</button>
+        <button id="resetBtn" onclick="resetSession()">Reset</button>
+    </div>
+
+    <div class="status-bar" id="statusBar">
+        準備完了 - Startを押してセッションを開始
+    </div>
+
+    <div class="metronome-indicator" id="metronomeIndicator">
+        <span class="beat-dot" id="dot0"></span>
+        <span class="beat-dot" id="dot1"></span>
+        <span class="beat-dot" id="dot2"></span>
+        <span class="beat-dot" id="dot3"></span>
+    </div>
+
+    <div class="tap-area-container">
+        <div class="tap-area" id="player1Area" onmousedown="tap(1)" ontouchstart="tap(1); event.preventDefault();">
+            <div class="player-label">Player 1</div>
+            <div class="key-hint">クリック or キー「F」</div>
+            <div class="tap-count" id="p1Count">0</div>
+            <div class="last-interval" id="p1Interval">--</div>
+        </div>
+        <div class="tap-area" id="player2Area" onmousedown="tap(2)" ontouchstart="tap(2); event.preventDefault();">
+            <div class="player-label">Player 2</div>
+            <div class="key-hint">クリック or キー「J」</div>
+            <div class="tap-count" id="p2Count">0</div>
+            <div class="last-interval" id="p2Interval">--</div>
+        </div>
+    </div>
+
+    <button id="analyzeBtn" onclick="analyze()" disabled>分析・可視化</button>
+
+    <div class="analysis-section hidden" id="analysisSection">
+        <h2>分析結果</h2>
+
+        <div class="stats-grid">
+            <div class="stat-card player1">
+                <h3>Player 1 平均テンポ変化</h3>
+                <div class="stat-value" id="p1TempoChange">--</div>
+            </div>
+            <div class="stat-card player2">
+                <h3>Player 2 平均テンポ変化</h3>
+                <div class="stat-value" id="p2TempoChange">--</div>
+            </div>
+            <div class="stat-card player1">
+                <h3>Player 1 最終BPM</h3>
+                <div class="stat-value" id="p1FinalBpm">--</div>
+            </div>
+            <div class="stat-card player2">
+                <h3>Player 2 最終BPM</h3>
+                <div class="stat-value" id="p2FinalBpm">--</div>
+            </div>
+        </div>
+
+        <div class="chart-container">
+            <h2>タップ間隔 (IOI) の時系列変化</h2>
+            <canvas id="ioiChart"></canvas>
+        </div>
+
+        <div class="chart-container">
+            <h2>瞬間BPMの時系列変化</h2>
+            <canvas id="bpmChart"></canvas>
+        </div>
+
+        <div class="chart-container">
+            <h2>2人のタップ間隔の差（非同期度 / Asynchrony）</h2>
+            <canvas id="asyncChart"></canvas>
+        </div>
+    </div>
+
+    <script>
+        // ---- State ----
+        let audioCtx = null;
+        let sessionActive = false;
+        let metronomeActive = false;
+        let sessionStartTime = 0;
+        let metronomeTimer = null;
+        let beatCount = 0;
+        let bpm = 120;
+        let maxMetronomeBeats = 16;
+
+        const taps = { 1: [], 2: [] };
+
+        // ---- Charts ----
+        let ioiChart = null;
+        let bpmChart = null;
+        let asyncChart = null;
+
+        // ---- Audio ----
+        function ensureAudioCtx() {
+            if (!audioCtx) {
+                audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            }
+            if (audioCtx.state === 'suspended') {
+                audioCtx.resume();
+            }
+        }
+
+        function playClick(freq, duration, volume) {
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            osc.type = 'sine';
+            osc.frequency.value = freq;
+            gain.gain.setValueAtTime(volume, audioCtx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + duration);
+            osc.connect(gain);
+            gain.connect(audioCtx.destination);
+            osc.start();
+            osc.stop(audioCtx.currentTime + duration);
+        }
+
+        function playMetronomeClick(isDownbeat) {
+            playClick(isDownbeat ? 1000 : 800, 0.05, 0.5);
+        }
+
+        function playTapSound(player) {
+            const freq = player === 1 ? 440 : 520;
+            playClick(freq, 0.08, 0.3);
+        }
+
+        // ---- Metronome ----
+        function startMetronome() {
+            metronomeActive = true;
+            beatCount = 0;
+            const intervalMs = 60000 / bpm;
+
+            function tick() {
+                if (!sessionActive || !metronomeActive) return;
+
+                const isDownbeat = (beatCount % 4) === 0;
+                playMetronomeClick(isDownbeat);
+
+                // Update beat dots
+                for (let i = 0; i < 4; i++) {
+                    document.getElementById('dot' + i).classList.toggle('active', i === (beatCount % 4));
+                }
+
+                beatCount++;
+
+                if (beatCount >= maxMetronomeBeats) {
+                    stopMetronome();
+                    return;
+                }
+
+                metronomeTimer = setTimeout(tick, intervalMs);
+            }
+
+            tick();
+        }
+
+        function stopMetronome() {
+            metronomeActive = false;
+            if (metronomeTimer) {
+                clearTimeout(metronomeTimer);
+                metronomeTimer = null;
+            }
+            for (let i = 0; i < 4; i++) {
+                document.getElementById('dot' + i).classList.remove('active');
+            }
+            document.getElementById('statusBar').innerHTML =
+                '<span class="metronome-off">メトロノーム OFF</span> - そのままタップを続けてください';
+        }
+
+        // ---- Session ----
+        function startSession() {
+            ensureAudioCtx();
+
+            bpm = parseInt(document.getElementById('bpmInput').value) || 120;
+            maxMetronomeBeats = parseInt(document.getElementById('metronomeBeats').value) || 16;
+
+            taps[1] = [];
+            taps[2] = [];
+            sessionActive = true;
+            sessionStartTime = performance.now();
+
+            document.getElementById('p1Count').textContent = '0';
+            document.getElementById('p2Count').textContent = '0';
+            document.getElementById('p1Interval').textContent = '--';
+            document.getElementById('p2Interval').textContent = '--';
+            document.getElementById('startBtn').disabled = true;
+            document.getElementById('stopBtn').disabled = false;
+            document.getElementById('analyzeBtn').disabled = true;
+            document.getElementById('analysisSection').classList.add('hidden');
+
+            document.getElementById('statusBar').innerHTML =
+                '<span class="metronome-on">メトロノーム ON</span> - タップを始めてください';
+
+            startMetronome();
+        }
+
+        function stopSession() {
+            sessionActive = false;
+            stopMetronome();
+
+            document.getElementById('startBtn').disabled = false;
+            document.getElementById('stopBtn').disabled = true;
+            document.getElementById('statusBar').textContent =
+                'セッション終了 - 「分析・可視化」を押して結果を確認';
+
+            const totalTaps = taps[1].length + taps[2].length;
+            document.getElementById('analyzeBtn').disabled = totalTaps < 4;
+        }
+
+        function resetSession() {
+            sessionActive = false;
+            stopMetronome();
+
+            taps[1] = [];
+            taps[2] = [];
+
+            document.getElementById('p1Count').textContent = '0';
+            document.getElementById('p2Count').textContent = '0';
+            document.getElementById('p1Interval').textContent = '--';
+            document.getElementById('p2Interval').textContent = '--';
+            document.getElementById('startBtn').disabled = false;
+            document.getElementById('stopBtn').disabled = true;
+            document.getElementById('analyzeBtn').disabled = true;
+            document.getElementById('analysisSection').classList.add('hidden');
+            document.getElementById('statusBar').textContent =
+                '準備完了 - Startを押してセッションを開始';
+
+            destroyCharts();
+        }
+
+        // ---- Tapping ----
+        function tap(player) {
+            if (!sessionActive) return;
+
+            const now = performance.now();
+            const relativeTime = now - sessionStartTime;
+            taps[player].push(relativeTime);
+
+            playTapSound(player);
+
+            // Update UI
+            const countEl = document.getElementById('p' + player + 'Count');
+            const intervalEl = document.getElementById('p' + player + 'Interval');
+            countEl.textContent = taps[player].length;
+
+            if (taps[player].length >= 2) {
+                const last = taps[player];
+                const ioi = last[last.length - 1] - last[last.length - 2];
+                const instantBpm = 60000 / ioi;
+                intervalEl.textContent = `IOI: ${ioi.toFixed(0)}ms (${instantBpm.toFixed(1)} BPM)`;
+            }
+
+            // Flash effect
+            const area = document.getElementById('player' + player + 'Area');
+            area.classList.add('flash');
+            setTimeout(() => area.classList.remove('flash'), 100);
+        }
+
+        // Keyboard input
+        document.addEventListener('keydown', (e) => {
+            if (e.repeat) return;
+            if (e.key === 'f' || e.key === 'F') tap(1);
+            if (e.key === 'j' || e.key === 'J') tap(2);
+        });
+
+        // ---- Analysis ----
+        function computeIOIs(tapTimes) {
+            const iois = [];
+            for (let i = 1; i < tapTimes.length; i++) {
+                iois.push(tapTimes[i] - tapTimes[i - 1]);
+            }
+            return iois;
+        }
+
+        function destroyCharts() {
+            if (ioiChart) { ioiChart.destroy(); ioiChart = null; }
+            if (bpmChart) { bpmChart.destroy(); bpmChart = null; }
+            if (asyncChart) { asyncChart.destroy(); asyncChart = null; }
+        }
+
+        function analyze() {
+            const iois1 = computeIOIs(taps[1]);
+            const iois2 = computeIOIs(taps[2]);
+
+            if (iois1.length < 2 && iois2.length < 2) {
+                alert('分析するには各プレイヤー最低3タップが必要です');
+                return;
+            }
+
+            document.getElementById('analysisSection').classList.remove('hidden');
+            destroyCharts();
+
+            const targetIOI = 60000 / bpm;
+            const metronomeCutoffTime = maxMetronomeBeats * targetIOI;
+
+            // Compute BPMs
+            const bpms1 = iois1.map(ioi => 60000 / ioi);
+            const bpms2 = iois2.map(ioi => 60000 / ioi);
+
+            // Stats
+            if (iois1.length >= 2) {
+                const firstBpm1 = bpms1[0];
+                const lastBpm1 = bpms1[bpms1.length - 1];
+                const avgLast3_1 = bpms1.slice(-3).reduce((a, b) => a + b, 0) / Math.min(3, bpms1.length);
+                document.getElementById('p1TempoChange').textContent =
+                    (avgLast3_1 - bpm > 0 ? '+' : '') + (avgLast3_1 - bpm).toFixed(1) + ' BPM';
+                document.getElementById('p1FinalBpm').textContent = avgLast3_1.toFixed(1);
+            }
+            if (iois2.length >= 2) {
+                const avgLast3_2 = bpms2.slice(-3).reduce((a, b) => a + b, 0) / Math.min(3, bpms2.length);
+                document.getElementById('p2TempoChange').textContent =
+                    (avgLast3_2 - bpm > 0 ? '+' : '') + (avgLast3_2 - bpm).toFixed(1) + ' BPM';
+                document.getElementById('p2FinalBpm').textContent = avgLast3_2.toFixed(1);
+            }
+
+            // Time labels: use the midpoint time of each interval (in seconds)
+            const timeLabels1 = [];
+            for (let i = 1; i < taps[1].length; i++) {
+                timeLabels1.push(((taps[1][i - 1] + taps[1][i]) / 2 / 1000).toFixed(1));
+            }
+            const timeLabels2 = [];
+            for (let i = 1; i < taps[2].length; i++) {
+                timeLabels2.push(((taps[2][i - 1] + taps[2][i]) / 2 / 1000).toFixed(1));
+            }
+
+            // Common chart options
+            const metronomeCutoffSec = metronomeCutoffTime / 1000;
+
+            function makeAnnotation() {
+                return {
+                    type: 'line',
+                    xMin: metronomeCutoffSec,
+                    xMax: metronomeCutoffSec,
+                    borderColor: 'rgba(233, 69, 96, 0.6)',
+                    borderWidth: 2,
+                    borderDash: [6, 4],
+                    label: {
+                        display: true,
+                        content: 'メトロノーム OFF',
+                        position: 'start',
+                        color: '#e94560',
+                        font: { size: 11 }
+                    }
+                };
+            }
+
+            // IOI Chart
+            const ioiData1 = iois1.map((v, i) => ({ x: parseFloat(timeLabels1[i]), y: v }));
+            const ioiData2 = iois2.map((v, i) => ({ x: parseFloat(timeLabels2[i]), y: v }));
+
+            ioiChart = new Chart(document.getElementById('ioiChart'), {
+                type: 'scatter',
+                data: {
+                    datasets: [
+                        {
+                            label: 'Player 1 IOI',
+                            data: ioiData1,
+                            borderColor: '#4ecca3',
+                            backgroundColor: 'rgba(78, 204, 163, 0.3)',
+                            showLine: true,
+                            tension: 0.2,
+                            pointRadius: 4,
+                        },
+                        {
+                            label: 'Player 2 IOI',
+                            data: ioiData2,
+                            borderColor: '#e94560',
+                            backgroundColor: 'rgba(233, 69, 96, 0.3)',
+                            showLine: true,
+                            tension: 0.2,
+                            pointRadius: 4,
+                        },
+                        {
+                            label: `目標IOI (${targetIOI.toFixed(0)}ms)`,
+                            data: ioiData1.length > 0 || ioiData2.length > 0 ? [
+                                { x: 0, y: targetIOI },
+                                { x: Math.max(
+                                    ...(ioiData1.length ? [ioiData1[ioiData1.length - 1].x] : [0]),
+                                    ...(ioiData2.length ? [ioiData2[ioiData2.length - 1].x] : [0])
+                                ), y: targetIOI }
+                            ] : [],
+                            borderColor: 'rgba(255,255,255,0.3)',
+                            borderDash: [5, 5],
+                            showLine: true,
+                            pointRadius: 0,
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    scales: {
+                        x: {
+                            title: { display: true, text: '時間 (秒)', color: '#aaa' },
+                            ticks: { color: '#888' },
+                            grid: { color: 'rgba(255,255,255,0.05)' }
+                        },
+                        y: {
+                            title: { display: true, text: 'IOI (ms)', color: '#aaa' },
+                            ticks: { color: '#888' },
+                            grid: { color: 'rgba(255,255,255,0.05)' }
+                        }
+                    },
+                    plugins: {
+                        legend: { labels: { color: '#ccc' } },
+                        annotation: {
+                            annotations: { cutoff: makeAnnotation() }
+                        }
+                    }
+                }
+            });
+
+            // BPM Chart
+            const bpmData1 = bpms1.map((v, i) => ({ x: parseFloat(timeLabels1[i]), y: v }));
+            const bpmData2 = bpms2.map((v, i) => ({ x: parseFloat(timeLabels2[i]), y: v }));
+
+            bpmChart = new Chart(document.getElementById('bpmChart'), {
+                type: 'scatter',
+                data: {
+                    datasets: [
+                        {
+                            label: 'Player 1 BPM',
+                            data: bpmData1,
+                            borderColor: '#4ecca3',
+                            backgroundColor: 'rgba(78, 204, 163, 0.3)',
+                            showLine: true,
+                            tension: 0.2,
+                            pointRadius: 4,
+                        },
+                        {
+                            label: 'Player 2 BPM',
+                            data: bpmData2,
+                            borderColor: '#e94560',
+                            backgroundColor: 'rgba(233, 69, 96, 0.3)',
+                            showLine: true,
+                            tension: 0.2,
+                            pointRadius: 4,
+                        },
+                        {
+                            label: `目標BPM (${bpm})`,
+                            data: bpmData1.length > 0 || bpmData2.length > 0 ? [
+                                { x: 0, y: bpm },
+                                { x: Math.max(
+                                    ...(bpmData1.length ? [bpmData1[bpmData1.length - 1].x] : [0]),
+                                    ...(bpmData2.length ? [bpmData2[bpmData2.length - 1].x] : [0])
+                                ), y: bpm }
+                            ] : [],
+                            borderColor: 'rgba(255,255,255,0.3)',
+                            borderDash: [5, 5],
+                            showLine: true,
+                            pointRadius: 0,
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    scales: {
+                        x: {
+                            title: { display: true, text: '時間 (秒)', color: '#aaa' },
+                            ticks: { color: '#888' },
+                            grid: { color: 'rgba(255,255,255,0.05)' }
+                        },
+                        y: {
+                            title: { display: true, text: 'BPM', color: '#aaa' },
+                            ticks: { color: '#888' },
+                            grid: { color: 'rgba(255,255,255,0.05)' }
+                        }
+                    },
+                    plugins: {
+                        legend: { labels: { color: '#ccc' } },
+                        annotation: {
+                            annotations: { cutoff: makeAnnotation() }
+                        }
+                    }
+                }
+            });
+
+            // Asynchrony Chart: for each Player 1 tap, find nearest Player 2 tap and compute difference
+            const asyncData = [];
+            if (taps[1].length > 0 && taps[2].length > 0) {
+                for (let i = 0; i < taps[1].length; i++) {
+                    const t1 = taps[1][i];
+                    let minDiff = Infinity;
+                    let bestDiff = 0;
+                    for (let j = 0; j < taps[2].length; j++) {
+                        const diff = taps[2][j] - t1;
+                        if (Math.abs(diff) < Math.abs(minDiff)) {
+                            minDiff = diff;
+                        }
+                    }
+                    // Only include if the nearest tap is within 1 beat
+                    if (Math.abs(minDiff) < targetIOI) {
+                        asyncData.push({ x: t1 / 1000, y: minDiff });
+                    }
+                }
+            }
+
+            asyncChart = new Chart(document.getElementById('asyncChart'), {
+                type: 'scatter',
+                data: {
+                    datasets: [
+                        {
+                            label: 'Asynchrony (P2 - P1) ms',
+                            data: asyncData,
+                            borderColor: '#f0a500',
+                            backgroundColor: 'rgba(240, 165, 0, 0.4)',
+                            showLine: true,
+                            tension: 0.2,
+                            pointRadius: 4,
+                        },
+                        {
+                            label: '同期 (0ms)',
+                            data: asyncData.length > 0 ? [
+                                { x: asyncData[0].x, y: 0 },
+                                { x: asyncData[asyncData.length - 1].x, y: 0 }
+                            ] : [],
+                            borderColor: 'rgba(255,255,255,0.3)',
+                            borderDash: [5, 5],
+                            showLine: true,
+                            pointRadius: 0,
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    scales: {
+                        x: {
+                            title: { display: true, text: '時間 (秒)', color: '#aaa' },
+                            ticks: { color: '#888' },
+                            grid: { color: 'rgba(255,255,255,0.05)' }
+                        },
+                        y: {
+                            title: { display: true, text: 'Asynchrony (ms)', color: '#aaa' },
+                            ticks: { color: '#888' },
+                            grid: { color: 'rgba(255,255,255,0.05)' }
+                        }
+                    },
+                    plugins: {
+                        legend: { labels: { color: '#ccc' } },
+                        annotation: {
+                            annotations: { cutoff: makeAnnotation() }
+                        }
+                    }
+                }
+            });
+
+            // Scroll to analysis
+            document.getElementById('analysisSection').scrollIntoView({ behavior: 'smooth' });
+        }
+    </script>
+</body>
+</html>
